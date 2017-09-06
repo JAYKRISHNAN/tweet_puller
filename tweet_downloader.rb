@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 require 'open-uri'
 require 'net/http'
 require 'base64'
@@ -5,7 +6,6 @@ require 'json'
 require 'pry'
 
 class TweetDownloader
-
   CONSUMER_KEY =  "JCCMdJzpJ0Ug9Xf1t8yPH754R"
   CONSUMER_SECRET = "JDcqVeqQJhLhe0MXb1cQ6H7HTBRZLKwuHEz4zv11Kzrb9hSD4a"
 
@@ -15,27 +15,31 @@ class TweetDownloader
 
   def initialize(hashtag, count)
     @hashtag = hashtag
-    @count = count
+    @count = (count.to_i - 1) #observed that API returns given count + 1
     @bearer_token = get_bearer_token
     @tweets = []
   end
 
   def execute
     get_tweets
-    write_tweets_to_file
+    write_tweets_to_file if @tweets
   end
 
   def get_tweets
     response = make_search_request
-    json_response = JSON.parse response.body
-    json_response["statuses"].each do |status|
-      @tweets << status["text"]
+    if response.code == "200"
+      json_response = JSON.parse response.body
+      json_response["statuses"].each do |status|
+        @tweets << status["text"]
+      end
+    else
+      print_error_message(response.code)
     end
   end
 
   def write_tweets_to_file
     File.open("output.txt", "w+") do |f|
-      @tweets.each { |tweet| f.puts(element) }
+      @tweets.each { |tweet| f.puts(tweet) }
     end
   end
 
@@ -63,7 +67,6 @@ class TweetDownloader
                rescue Timeout::Error
                  retried = true and retry unless retried #retry upon timeout
                end
-
     json_response = JSON.parse(response.body)
     json_response['access_token']
   end
@@ -73,21 +76,15 @@ class TweetDownloader
     uri.query = URI.encode_www_form(search_request_parameters)
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true
-    request = Net::HTTP::Get.new(uri.request_uri)
-    request.initialize_http_header(search_request_headers)
+    http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+    request = Net::HTTP::Get.new(uri)
+    request["Authorization"] = "Bearer #{@bearer_token}"
     retried = false
-    binding.pry
     begin
       http.request(request)
     rescue Timeout::Error
       retried = true and retry unless retried #retry upon timeout
     end
-  end
-
-  def search_request_headers
-    { "Content-Type" => "application/json",
-      'Authorization'=>"Bearer #{Base64.encode64(@bearer_token)}"
-    }
   end
 
   def search_request_parameters
@@ -96,5 +93,38 @@ class TweetDownloader
       result_type: TWITTER_SEARCH_RESULT_TYPE,
       count: @count.to_s
     }
+  end
+
+  def print_error_message response_code # from twitter api docs
+    case response_code
+    when "400"
+      print_to_console "The request was invalid or cannot be otherwise served"
+    when "401"
+      print_to_console "Missing or incorrect authentication credentials."
+    when "403"
+      print_to_console "The request is understood, but it has been refused"
+    when "404"
+      print_to_console "The URI requested is invalid or the resource requested"
+    when "406"
+      print_to_console "Invalid format is specified in the request."
+    when "410"
+      print_to_console "This resource is gone"
+    when "420"
+      print_to_console "Application is being rate limited ."
+    when "422"
+      print_to_console "Unable to be processed"
+    when "429"
+      print_to_console "Application’s rate limit having been exhausted for the resource"
+    when "500"
+      print_to_console "Something is broken"
+    when "503"
+      print_to_console "The Twitter servers are up, but overloaded with requests. Try again later"
+    when "504"
+      print_to_console "The Twitter servers are up, but the request couldn’t be serviced due to some failure within our stack. Try again later."
+    end
+  end
+
+  def print_to_console message
+    puts message
   end
 end
