@@ -1,0 +1,4 @@
+- This is a command line ruby application that pulls tweets with the given hashtag and write it to a file.
+- create a twitter app after signing up for their dev account and get credentials
+- To execute the app run <ruby main.rb #hashtag1 required_count twitter_consumer_key twitter_consumer_secret>
+- to run the spec set run rspec spec/

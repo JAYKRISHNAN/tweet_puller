@@ -6,34 +6,36 @@ require 'json'
 require 'pry'
 
 class TweetDownloader
-  CONSUMER_KEY =  "JCCMdJzpJ0Ug9Xf1t8yPH754R"
-  CONSUMER_SECRET = "JDcqVeqQJhLhe0MXb1cQ6H7HTBRZLKwuHEz4zv11Kzrb9hSD4a"
+  PAGINATION_LIMIT = 50
 
   TWITTER_SEARCH_API_URL = "https://api.twitter.com/1.1/search/tweets.json"
   TWITTER_API_OAUTH_URL = "https://api.twitter.com/oauth2/token"
   TWITTER_SEARCH_RESULT_TYPE = "recent"
 
-  def initialize(hashtag, count)
+  def initialize(hashtag, count, consumer_key, consumer_secret)
     @hashtag = hashtag
     @count = (count.to_i - 1) #observed that API returns given count + 1
+    @consumer_key = consumer_key
+    @consumer_secret = consumer_secret
     @bearer_token = get_bearer_token
     @tweets = []
   end
 
   def execute
     get_tweets
-    write_tweets_to_file if @tweets
+    write_tweets_to_file
   end
 
   def get_tweets
-    response = make_search_request
-    if response.code == "200"
-      json_response = JSON.parse response.body
-      json_response["statuses"].each do |status|
-        @tweets << status["text"]
+    ((@count/PAGINATION_LIMIT) + 1).times do
+      response = make_search_request
+      if response.code == "200"
+        json_response = JSON.parse response.body
+        @max_id  = json_response["statuses"].map{|tweet| tweet["id"] }.max
+        @tweets << json_response["statuses"].map{|tweet| tweet["text"] }
+      else
+        print_error_message(response.code)
       end
-    else
-      print_error_message(response.code)
     end
   end
 
@@ -46,8 +48,8 @@ class TweetDownloader
   private
 
   def get_bearer_token
-    encoded_key = URI::encode(CONSUMER_KEY)
-    encoded_secret = URI::encode(CONSUMER_SECRET)
+    encoded_key = URI::encode(@consumer_key)
+    encoded_secret = URI::encode(@consumer_secret)
     combined_secret_key = [encoded_key, encoded_secret].join(':')
     encoded_secret_key  = Base64.encode64(combined_secret_key).gsub("\n", '')
     uri = URI(TWITTER_API_OAUTH_URL)
@@ -73,6 +75,7 @@ class TweetDownloader
 
   def make_search_request
     uri = URI.parse(TWITTER_SEARCH_API_URL)
+    search_request_parameters[:max_id] = @max_id unless first_request?
     uri.query = URI.encode_www_form(search_request_parameters)
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true
@@ -91,11 +94,15 @@ class TweetDownloader
     {
       q: @hashtag,
       result_type: TWITTER_SEARCH_RESULT_TYPE,
-      count: @count.to_s
+      count: @count.to_s,
     }
   end
 
-  def print_error_message response_code # from twitter api docs
+  def first_request?
+    !@max_id.nil?
+  end
+
+  def print_error_message response_code # all error codes from twitter api docs
     case response_code
     when "400"
       print_to_console "The request was invalid or cannot be otherwise served"
