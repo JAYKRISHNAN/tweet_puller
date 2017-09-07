@@ -14,7 +14,7 @@ class TweetDownloader
 
   def initialize(hashtag, count, consumer_key, consumer_secret)
     @hashtag = hashtag
-    @count = (count.to_i - 1) #observed that API returns given count + 1
+    @count = count
     @consumer_key = consumer_key
     @consumer_secret = consumer_secret
     @bearer_token = get_bearer_token
@@ -27,7 +27,7 @@ class TweetDownloader
   end
 
   def get_tweets
-    (@count/((PAGINATION_LIMIT).to_f).ceil).times do
+    ((@count/((PAGINATION_LIMIT).to_f)).ceil).times do
       response = make_search_request
       if response.code == "200"
         json_response = JSON.parse response.body
