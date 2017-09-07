@@ -27,7 +27,7 @@ class TweetDownloader
   end
 
   def get_tweets
-    ((@count/PAGINATION_LIMIT) + 1).times do
+    (@count/((PAGINATION_LIMIT).to_f).ceil).times do
       response = make_search_request
       if response.code == "200"
         json_response = JSON.parse response.body
@@ -37,6 +37,7 @@ class TweetDownloader
         print_error_message(response.code)
       end
     end
+    @tweets.flatten!
   end
 
   def write_tweets_to_file
@@ -94,7 +95,7 @@ class TweetDownloader
     {
       q: @hashtag,
       result_type: TWITTER_SEARCH_RESULT_TYPE,
-      count: @count.to_s,
+      count: PAGINATION_LIMIT.to_s,
     }
   end
 
